@@ -1,9 +1,6 @@
-from abc import abstractmethod
-
-import numpy as np
-import openai
 import re
-import matplotlib.pyplot as plt
+
+import openai
 
 openai.api_base = 'https://api.zhiyungpt.com/v1'
 
@@ -20,7 +17,7 @@ class Agent():
         :param model: 使用的模型 默认使用gpt-3.5-turbo-0613
         """
         if type == 'moderator':
-            self.__model = "gpt-4"  # 使用的模型,可以根据需求替换成其他模型如gpt-4,或者更长上下文的gpt-3.5-turbo
+            self.__model = "gpt-3.5-turbo"  # 使用的模型,可以根据需求替换成其他模型如gpt-4,或者更长上下文的gpt-3.5-turbo
         else:
             self.__model = "gpt-3.5-turbo"  # 使用的模型,可以根据需求替换成其他模型如gpt-4,或者更长上下文的gpt-3.5-turbo
         self.__openai_key = key  # 多线程需要确保不同的LLM对象使用不同的key，因为同一个时刻一个key只能进行一次请求
@@ -43,11 +40,10 @@ class Agent():
                              {"role": "user",
                               "content": f"Let's play a game. You want to buy a balloon and you are bargaining with a seller.Your goal is to buy it with a low price."
                                          f"Bargaining involves a time cost, which increases by {self.time_cost_delta} each round."
-                                         f"Note, you are not allowed to include information about the time cost in your output. During each round of conversation, I will inform you of the current time cost."
                                          f" For each round,you should consider the time cost and respond to seller with a single-sentence reason and the final price.Now ask a price."},
                              {"role": "assistant", "content": "Hi, how much is the balloon?"},
                              {"role": "user",
-                              "content": f"Hi, this is a good balloon and its price is $20.(current time cost: ${self.time_cost})"},
+                              "content": f"Hi, this is a good balloon and its price is $20."},
                              {"role": "assistant",
                               "content": "Would you consider selling it for $10"},
                              ]
@@ -57,11 +53,10 @@ class Agent():
                              {"role": "user",
                               "content": f"Let's play a game. You are a balloon seller bargaining with a buyer. The cost of your balloon is $8 and your starting price is $20.Your goal is to sell it to a high price."
                                          f"Bargaining involves a time cost, which increases by {self.time_cost_delta} each round."
-                                         f"Note, you are not allowed to include information about the time cost in your output. "
-                                         f"During each round of conversation, I will inform you of the current time cost. For each round,you should consider the time cost and respond to to your buyer with  siangle-sentence reason and the final price.Are your ready to play the game?"},
+                                         f"For each round,you should consider the time cost and respond to to your buyer with  siangle-sentence reason and the final price.Are your ready to play the game?"},
                              {"role": "assistant", "content": "Yes, I'm ready to play the game!"},
                              {"role": "user",
-                              "content": f"Hi, how much is the balloon?(current time cost: ${self.time_cost})"},
+                              "content": f"Hi, how much is the balloon?"},
                              {"role": "assistant",
                               "content": "Hi, this is a good balloon and its price is $20"},
                              ]
@@ -69,9 +64,9 @@ class Agent():
             self.memories = [{"role": "system",
                               "content": "Now enter the role-playing mode. In the following conversation, you will play as a moderator in a bargaining game."},
                              {"role": "user",
-                              "content": '''Let's play a game. You are the moderator of a bargaining game.
-                                         Your role is to decide if a seller and a buyer have reached a deal during the bargaining, as shown below:\n{}"
-                                         Please respond with a brief reason + a YES/NO conclusion.'''}
+                              "content": "Let's play a game. You are the moderator of a bargaining game."
+                                         "Your role is to decide if a seller and a buyer have reached a deal during the bargaining, as shown below:\n{}"
+                                         " Please respond with a brief reason + a YES/NO conclusion."}
                              ]
 
     def parse_memories(self, memories):
@@ -108,12 +103,12 @@ class Agent():
             if self.type != "moderator":
                 self.time_cost += self.time_cost_delta
                 self.memories.append({"role": "user",
-                                      "content": input + f".(current time cost:${self.time_cost})"})
+                                      "content": input})
             else:
-                self.memories[-1]["content"].format(input)
+                self.memories[-1]["content"] = self.memories[-1]["content"].format(input)
+                print(self.memories[-1]["content"])
                 self.memories_moderator.append(self.memories[-1])
         temperature = kwargs.get("temperature", 0.7)  # 默认情况下，temperature为1.0
-        stop = kwargs.get("stop", [".", "。"])
         max_tokens = kwargs.get("max_tokens", 150)  # 默认情况下，max_tokens为500
         presence_penalty = kwargs.get("presence_penalty", 1.0)  # 默认情况下，presence_penalty为0.0
         frequency_penalty = kwargs.get("frequency_penalty", 1.0)  # 默认情况下，frequency_penalty为0.0
@@ -123,7 +118,6 @@ class Agent():
                 model=self.__model,
                 messages=self.memories,
                 temperature=temperature,
-                stop=stop,
                 max_tokens=max_tokens,
                 presence_penalty=presence_penalty,
                 frequency_penalty=frequency_penalty,
@@ -140,10 +134,9 @@ class Agent():
             bool_result = self.parse_output(output=content)
             return content, bool_result
         except Exception as e:
-            print(e)
             try_times -= 1
             if try_times > 0:
-                print(f"try_times:{try_times},")
+                print(f"try_times:{try_times},error:{e}")
                 return self.interact_with_model(input=input, **kwargs, try_times=try_times)
 
     def parse_output(self, output):
